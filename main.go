@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	ticker       = flag.String("ticker", "GOOGL", "Ticker to look for last close value")
-	wantMinPrice = flag.String("want_min_price", "150CHF", "minumum price wanted in to trigger an alert, must finish with wanted currency")
+	ticker        = flag.String("ticker", "GOOGL", "Ticker to look for last close value")
+	wantMinPrices = flag.String("want_min_prices", "170CHF,150USD", "comma separated minumum prices wanted in to trigger an alert, must finish with wanted currencies symbols (i.e. 150CHF,140USD)")
 )
 
 func getBaseCurrency(ctx context.Context, c *polygon.Client, ticker string) (string, error) {
@@ -61,40 +61,42 @@ func main() {
 	flag.Parse()
 	ctx := context.Background()
 	c := polygon.New(os.Getenv("API_KEY"))
-	// Parse input.
-	wantPriceDestCurrency, destCurrencySymbol, err := parsePrice(*wantMinPrice)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println("want price dest curr=", wantPriceDestCurrency)
-	fmt.Println("dest curr=", destCurrencySymbol)
-	// Get previous close value
-	lastClosePrice, err := getLastClosePrice(ctx, c, *ticker)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println("last close price=", lastClosePrice)
-
-	// Get currency the stock is traded in.
-	baseCurrencySymbol, err := getBaseCurrency(ctx, c, *ticker)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(*ticker, "is traded in", baseCurrencySymbol)
-	conversionRate := decimal.NewFromFloat(1.0)
-	if baseCurrencySymbol != destCurrencySymbol {
-		// Get exchange rate between currencies.
-		currencyLastClosePrice, err := getLastClosePrice(ctx, c, fmt.Sprintf("C:%s%s", baseCurrencySymbol, destCurrencySymbol))
+	for _, wantMinPrice := range strings.Split(*wantMinPrices, ",") {
+		// Parse input.
+		wantPriceDestCurrency, destCurrencySymbol, err := parsePrice(wantMinPrice)
 		if err != nil {
 			log.Fatal(err)
 		}
-		conversionRate = currencyLastClosePrice
-	}
-	convertedClosePrice := lastClosePrice.Mul(conversionRate)
-	fmt.Println(lastClosePrice, baseCurrencySymbol, "is equal to", convertedClosePrice, destCurrencySymbol)
+		fmt.Println("want price dest curr=", wantPriceDestCurrency)
+		fmt.Println("dest curr=", destCurrencySymbol)
+		// Get previous close value
+		lastClosePrice, err := getLastClosePrice(ctx, c, *ticker)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("last close price=", lastClosePrice)
 
-	if convertedClosePrice.Cmp(wantPriceDestCurrency) > 0 {
-		fmt.Println("Prices match, exiting the program with an error code")
-		os.Exit(1)
+		// Get currency the stock is traded in.
+		baseCurrencySymbol, err := getBaseCurrency(ctx, c, *ticker)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(*ticker, "is traded in", baseCurrencySymbol)
+		conversionRate := decimal.NewFromFloat(1.0)
+		if baseCurrencySymbol != destCurrencySymbol {
+			// Get exchange rate between currencies.
+			currencyLastClosePrice, err := getLastClosePrice(ctx, c, fmt.Sprintf("C:%s%s", baseCurrencySymbol, destCurrencySymbol))
+			if err != nil {
+				log.Fatal(err)
+			}
+			conversionRate = currencyLastClosePrice
+		}
+		convertedClosePrice := lastClosePrice.Mul(conversionRate)
+		fmt.Println(lastClosePrice, baseCurrencySymbol, "is equal to", convertedClosePrice, destCurrencySymbol)
+
+		if convertedClosePrice.Cmp(wantPriceDestCurrency) > 0 {
+			fmt.Println("Prices match, exiting the program with an error code")
+			os.Exit(1)
+		}
 	}
 }
